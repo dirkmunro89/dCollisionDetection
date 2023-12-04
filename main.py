@@ -18,7 +18,7 @@ from init import init#, pretfms6, pretfms24
 #
 from util import tfmx, tran, appdata, woutfle
 #
-def dcol(xk0,xk1,pnt0,pnt1,c_a,c_l):
+def dcol(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
 #   transform the points (about 0,0,0)
 #
@@ -43,26 +43,42 @@ def dcol(xk0,xk1,pnt0,pnt1,c_a,c_l):
     xt=np.zeros(nut)
     scl=np.linalg.norm(c_l*ck0-c_l*ck1)**2.
 #
-    c_p=5e2
-    eqf=1.
+    bds=[[0.,1.] for i in range(nut)]; tup_bds=tuple(bds)
+    c_p2=np.array([1.,1.])
+    c_p1=np.array([0.,0.])
 #
-    while c_p < 1e3:
-        t0=time.time()
-        bds=[[0.,1.] for i in range(nut)]; tup_bds=tuple(bds)
-        sol=minimize(func,xt,args=(ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p,eqf,scl),\
-        bounds=tup_bds,jac=grad,method='L-BFGS-B',options={'disp':False,'gtol':1e-12,'ftol':1e-12})
+    c_p1_old=np.ones_like(c_p1)
+    xtold=np.ones_like(xt)
+    g0=1
+    g1=1
+    while np.linalg.norm(xt-xtold) > 1e-12 or max(g0,g1)>1e-6:
 #
-        print(sol.fun,c_p,sol.nit)
+        xtold[:]=xt
+        sol=minimize(func,xt,args=(ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl),\
+            bounds=tup_bds,jac=grad,method='L-BFGS-B',options={'ftol':1e-16,'gtol':1e-16})
 #
-        c_p=c_p*2.
-#
-        t1=time.time()
         xt=sol.x
+        xt0=xt[nuts[0]:nuts[1]]
+        xt1=xt[nuts[1]:nuts[2]]
+        g0=(np.sum(xt0)-1.)
+        g1=(np.sum(xt1)-1.)
 #
+#       augmented lagrangian see Rao 461-462
 #
-    return np.sqrt(sol.fun*scl)
+        c_p1_old[:]=c_p1
+        c_p1[0]=c_p1[0]+2*c_p2[0]*g0
+        c_p1[1]=c_p1[1]+2*c_p2[1]*g1
+        c_p2[0]=c_p2[0]*1.1
+        c_p2[1]=c_p2[1]*1.1
+        print(sol)
+        print(c_p1,c_p2,g0,g1,sol.fun,g0,g1)
+        print('---')
 #
-def grad(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p,eqf,scl):
+#   print(sol)
+#
+    return np.sqrt(max(sol.fun,0.)*scl), sol.x
+#
+def grad(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,eqf,scl):
 #
     g=np.zeros_like(xt)
 #   dposdt=np.zeros((len(xt),3))
@@ -86,14 +102,18 @@ def grad(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p,eqf,scl):
 #
     g0=(np.sum(xt0)-1.)
     g1=(np.sum(xt1)-1.)
-    if g0 + eqf*1e8 > 0:
-        g[nuts[0]:nuts[1]]=g[nuts[0]:nuts[1]]+2.*g0*c_p
-    if g1 + eqf*1e8 > 0:
-        g[nuts[1]:nuts[2]]=g[nuts[1]:nuts[2]]+2.*g1*c_p
+#   if g0 + eqf*1e8 > 0:
+    if sol_flg == 1:
+        g0 = max(g0, -c_p1[0]/2./c_p2[0])
+        g1 = max(g1, -c_p1[1]/2./c_p2[1])
+#
+    g[nuts[0]:nuts[1]]=g[nuts[0]:nuts[1]]+2.*g0*c_p2[0] + c_p1[0]
+#   if g1 + eqf*1e8 > 0:
+    g[nuts[1]:nuts[2]]=g[nuts[1]:nuts[2]]+2.*g1*c_p2[1] + c_p1[1]
 #
     return g
 #
-def func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p,eqf,scl):
+def func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,eqf,scl):
 #
     xt0=xt[nuts[0]:nuts[1]]
     xt1=xt[nuts[1]:nuts[2]]
@@ -116,13 +136,13 @@ def func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p,eqf,scl):
     tmp=0.
     g0=(np.sum(xt0)-1.)
     g1=(np.sum(xt1)-1.)
-    if g0 + eqf*1e8 > 0:
-        tmp=tmp+g0**2.
-    if g1 + eqf*1e8 > 0:
-        tmp=tmp+g1**2.
+#
+    if sol_flg == 1:
+        g0 = max(g0, -c_p1[0]/2./c_p2[0])
+        g1 = max(g1, -c_p1[1]/2./c_p2[1])
 #
     dis=pos0-pos1
-    f=np.dot(dis,dis.T)/scl+tmp*c_p
+    f=np.dot(dis,dis.T)/scl+c_p1[0]*g0+c_p1[1]*g1 + c_p2[0]*g0**2. + c_p2[1]*g1**2.
 #
     return f
 #
@@ -149,9 +169,13 @@ if __name__ == "__main__":
 #
 #   hard code system arguments
 #
+    log.info('='*60)
+    sol_flg=int(sys.argv[1])
+#
+    log.info('sol_flg: %d'%sol_flg)
+#
     sys.argv=['main.py', 'objall', '0', '2', 'stl/Cone.stl']
 #
-    log.info('='*60)
     tmp=" ".join(sys.argv)
     c=0
     while True:
@@ -225,6 +249,7 @@ if __name__ == "__main__":
     log.info('='*60)
 #
     pnts = [obj.pts for obj in objs]
+    vtps = [obj.vtp for obj in objs]
 #
     c_r=[]
 #
@@ -232,56 +257,45 @@ if __name__ == "__main__":
     log.info('-'*60)
 #
 ####################################################
-#   transform
-##################################################
-    xk=np.array([0 for i in range(7*n)])
-    xk=2.*np.random.rand(7*n)/4.-1./4.
 #
     pi=[0,1] # global part indices
+#
+#   the transforms
+#
+    xk=np.array([0 for i in range(7*n)])
+    xk=2.*np.random.rand(7*n)/2.-1./2.
+#
+#   some prep
 #
     xk0=xk[7*pi[0]:7*pi[0]+7]
     xk1=xk[7*pi[1]:7*pi[1]+7]
     pnt0=pnts[maps[pi[0]]]
     pnt1=pnts[maps[pi[1]]]
 #
-    dis=dcol(xk0,xk1,pnt0,pnt1,c_a,c_l)
-    print(dis)
-    stop
+#   calc distance
 #
-#
-#   will always be only two parts, so maybe
-#
-#
-    nt=0
-    nuts=[nt]
-    nt=nt+len(pnts[maps[pi[0]]])
-    nuts.append(nt)
-    nt=nt+len(pnts[maps[pi[1]]])
-    nuts.append(nt)
-#
-#   update all points once, then pass
-#
-    pnts_1=[]
-    for i in range(n):
-        pnt=pnts[maps[i]]
-        tmp = np.array([xk[7*i+1],xk[7*i+2],xk[7*i+3]])
-        if np.linalg.norm(tmp):
-            tmp = tmp/np.linalg.norm(tmp)
-        else:
-            tmp=tmp*0.
-        rot=R.from_rotvec((c_a*xk[7*i])*tmp).as_matrix().T
-        pnts_1.append(np.dot(pnt,rot))
-#
-#
-    print('qp')
     t0=time.time()
-    bds=[[0.,1.] for i in range(nt)]; tup_bds=tuple(bds)
-    sol=minimize(func,xt,args=(xk,pp,pnts_1,nuts,c_a,c_l,scl),\
-        bounds=tup_bds,jac=grad,method='L-BFGS-B',options={'gtol':1e-12,'ftol':1e-12})
+#
+    if sol_flg == 0:
+#
+#       augmented lagrangian formulation, equality constraint
+#
+        [dis,xt]=dcol(xk0,xk1,pnt0,pnt1,c_a,c_l,0)
+#
+    elif sol_flg == 1:
+#
+#       augmented lagrangian formulation, inequality constraint
+#
+        [dis,xt]=dcol(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
     t1=time.time()
-    xt=sol.x
-    print('distance=',np.sqrt(sol.fun*scl))
+#
+    log.info('Distance: %14.7e'%dis)
+#
+#   output
+#
+    nut=len(pnt0)+len(pnt1)
+    nuts=[0,len(pnt0),nut]
 #
     tees=[]
     for i in range(n):
@@ -291,13 +305,11 @@ if __name__ == "__main__":
     woutfle(out,app.GetOutput(),'objec',0)
 #
     points=vtk.vtkPoints()
-#
     ct=0
     pees=[]
     pen=0.
     for i in range(n):
 #
-#       update points and compute vec
         pnt=pnts[maps[i]]
         tmp = np.array([xk[7*i+1],xk[7*i+2],xk[7*i+3]])
         if np.linalg.norm(tmp):
@@ -308,7 +320,6 @@ if __name__ == "__main__":
         pos=np.dot(xt[ct:ct+len(pnt)],np.dot(pnt,rot))
 #
         pen=pen+(np.sum(xt[ct:ct+len(pnt)])-1.)**2.
-        print('sum',np.sum(xt[ct:ct+len(pnt)]))
         ct=ct+len(pnt)
 #
         pee=pos+xk[7*i+4:7*i+7]*c_l
@@ -327,7 +338,6 @@ if __name__ == "__main__":
     ply.SetLines(cell)
     woutfle(out,ply,'line',0)
 #
-#
 #   check
 #
     vtps_1=[]
@@ -335,42 +345,90 @@ if __name__ == "__main__":
 #
         tfmx(xk,i,c_l,c_a,c_r,tfms[i],99,0)
 #
-        vtp=tran(vtps[maps[i]],tfms[i]) # can maybe get this from col object
+        vtp=tran(vtps[maps[i]],tfms[i]) 
 #
         vtps_1.append(vtp)
-
 #
-    flt0=vtk.vtkImplicitPolyDataDistance()
-    flt1=vtk.vtkImplicitPolyDataDistance()
 #
-    flt0.SetInput(vtps_1[0])
-    flt1.SetInput(vtps_1[1])
+#   this calculates point to point distance....
+#
+#   pack it away in a func...
+#
 #
     pnt0=vtps_1[0].GetPoints()
     pnt1=vtps_1[1].GetPoints()
 #
-    min_sd0=1e8
-    min_sd1=1e8
-    min_p0=0.
-    min_p1=0.
+    flt=vtk.vtkCellLocator()
+    flt.SetDataSet(vtps_1[1])
+    flt.BuildLocator()
+    flt.Update()
+    min_dis=1e8
+    min_p0=None
+    min_p1=None
     for pid in range(pnt0.GetNumberOfPoints()):
-        p = pnt0.GetPoint(pid)
-        sd = flt1.EvaluateFunction(p)
-        if sd < min_sd0:
-            min_p0=p
-        min_sd0=min(min_sd0,sd)
+        p=pnt0.GetPoint(pid)
+        cellId = vtk.reference(0)
+        c = [0.0, 0.0, 0.0]
+        subId = vtk.reference(0)
+        d = vtk.reference(0.0)
+        flt.FindClosestPoint(p,c,cellId,subId,d)
+        flt.Update()
+        d=np.linalg.norm(np.array(p)-np.array(c))
+        if d < min_dis:
+            min_p1=c#.copy()
+            min_p0=p#.copy()
+        min_dis=min(min_dis,d)
+    print(min_dis)
+    flt=vtk.vtkCellLocator()
+    flt.SetDataSet(vtps_1[0])
+    flt.BuildLocator()
+    flt.Update()
+    min_p=None
     for pid in range(pnt1.GetNumberOfPoints()):
-        p = pnt1.GetPoint(pid)
-        sd = flt0.EvaluateFunction(p)
-        if sd < min_sd1:
-            min_p1=p
-        min_sd1=min(min_sd1,sd)
+        p=pnt1.GetPoint(pid)
+        cellId = vtk.reference(0)
+        c = [0.0, 0.0, 0.0]
+        subId = vtk.reference(0)
+        d = vtk.reference(0.0)
+        flt.FindClosestPoint(p,c,cellId,subId,d)
+        flt.Update()
+        d=np.linalg.norm(np.array(p)-np.array(c))
+        if d < min_dis:
+            min_p1=c#.copy()
+            min_p0=p#.copy()
+        min_dis=min(min_dis,d)
+#
+    print(min_dis)
+#
+#   flt0.SetInput(vtps_1[0])
+#   flt1.SetInput(vtps_1[1])
+#
+#
+#   min_sd0=1e8
+#   min_sd1=1e8
+#   min_p0_0=None
+#   min_p0_1=None
+#   min_p1_0=None
+#   min_p1_1=None
+#   for pid in range(pnt0.GetNumberOfPoints()):
+#       p = pnt0.GetPoint(pid)
+#       sd = flt1.EvaluateFunction(p)
+#       if sd < min_sd0:
+#           min_p0=p
+#       min_sd0=min(min_sd0,sd)
+#   for pid in range(pnt1.GetNumberOfPoints()):
+#       p = pnt1.GetPoint(pid)
+#       sd = flt0.EvaluateFunction(p)
+#       if sd < min_sd1:
+#           min_p1=p
+#       min_sd1=min(min_sd1,sd)
 #
     points=vtk.vtkPoints()
     points.InsertNextPoint(min_p0)
     points.InsertNextPoint(min_p1)
-    print(max(min_sd0,0.))
-    print(max(min_sd1,0.))
+#   min_sd0=max(min_sd0,0.)
+#   min_sd1=max(min_sd1,0.)
+#   min_sd=min(min_sd0,min_sd1)
     line=vtk.vtkPolyLine()
     line.GetPointIds().SetNumberOfIds(2)
     line.GetPointIds().SetId(0,0)
@@ -381,6 +439,20 @@ if __name__ == "__main__":
     ply.SetPoints(points)
     ply.SetLines(cell)
     woutfle(out,ply,'line_sd',0)
+#
+    g1=np.sum(xt[nuts[0]:nuts[1]])-1
+    g2=np.sum(xt[nuts[1]:nuts[2]])-1
+#
+    log.info('Distance: %14.7e'%min_dis)
+    log.info('Violation: %14.7e'%max(max(g1,g2),0.))
+#
+    err=abs(dis - min_dis)
+    if dis > 1e-6:
+        err=err/dis
+    else:
+        err=0.
+    log.info('Rel. Error if non-zero: %14.7e'%(err))
+    log.info('Time (s): %14.7e'%(t1-t0))
 #
     stop
 #
