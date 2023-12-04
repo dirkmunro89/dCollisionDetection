@@ -1,0 +1,5 @@
+numpy
+scipy
+cvxopt
+osqp
+vtk==9.3.0
