@@ -41,7 +41,6 @@ def init(i,fln,c_e,c_s,log,deb):
         flt.SetInputData(obj.vtp_0)
         flt.SetUseScalarsAsWeights(False)
         flt.Update()
-#
         obj.cen_0=flt.GetCenter()
 #
         prp=vtk.vtkMassProperties()

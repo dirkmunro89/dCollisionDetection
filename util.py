@@ -187,8 +187,8 @@ def woutfle(out,vtp,fln,k):
     writer.SetCompressorTypeToNone()
     if k < 0:
         writer.SetFileName(out+fln+'_%s.vtp'%(chr(ord('`')+(-k))))
-    elif k == 0:
-        writer.SetFileName(out+fln+'.vtp')
+#   elif k == 0:
+#       writer.SetFileName(out+fln+'.vtp')
     else:
         writer.SetFileName(out+fln+'_%d.vtp'%k)
     writer.Update()
