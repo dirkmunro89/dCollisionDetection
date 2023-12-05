@@ -16,6 +16,7 @@ from dcol_qplcvx import dcol_qplcvx
 from dcol_qplosq import dcol_qplosq
 from dcol_lstcvx import dcol_lstcvx
 from dcol_lstosq import dcol_lstosq
+from dcol_lstcpx import dcol_lstcpx
 #
 from init import init#, pretfms6, pretfms24
 #
@@ -49,7 +50,7 @@ if __name__ == "__main__":
 #
     log.info('sol_flg: %d'%sol_flg)
 #
-    sys.argv=['main.py', 'objall', '0', '2', 'stl/Cone.stl']
+    sys.argv=['main.py', 'objall', '0', '2', 'stl/Done.stl']
 #
     tmp=" ".join(sys.argv)
     c=0
@@ -142,7 +143,7 @@ if __name__ == "__main__":
     ei=0.
     errs=[]
     xk_keep=None
-    for k in range(1):
+    for k in range(100):
 #
         xk=np.array([0 for i in range(7*n)])
         xk=2.*np.random.rand(7*n)/1.-1./1.
@@ -195,6 +196,12 @@ if __name__ == "__main__":
 #           least squares transform osqp
 #
             [dis,xt,pos0,pos1]=dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
+#
+        elif sol_flg == 6:
+#
+#           least squares transform cplex
+#
+            [dis,xt,pos0,pos1]=dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
         t1=time.time()
 #

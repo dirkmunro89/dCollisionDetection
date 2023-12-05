@@ -1,5 +1,6 @@
 #
 import vtk
+import cplex
 import cvxopt
 import numpy as np
 from cvxopt import solvers, matrix, spmatrix
@@ -12,7 +13,7 @@ def scipy_sparse_to_spmatrix(A):
     SP = spmatrix(coo.data.tolist(), coo.row.tolist(), coo.col.tolist(), size=A.shape)
     return SP
 #
-def dcol_lstcvx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
+def dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
 #   transform the points (about 0,0,0)
 #
@@ -59,7 +60,6 @@ def dcol_lstcvx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
                      [  Ad1    ,-np.array([0.,1.,0.])],
                      [  Ad2    ,-np.array([0.,0.,1.])]],format='csc')
 #
-    b = c_l*np.array([ck1[0] - ck0[0], ck1[1]-ck0[1], ck1[2]-ck0[2]])/scl
 #
     H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), sparse.eye(3) ], format='csc')
     q=np.zeros(nut+3) 
@@ -68,16 +68,59 @@ def dcol_lstcvx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
     solvers.options['abstol']=1e-9
     solvers.options['maxiters']=int(1e6)
 #
-    H=scipy_sparse_to_spmatrix(H)
-    G=scipy_sparse_to_spmatrix(G)
-    q=matrix(q,tc='d')
-    h=matrix(h,tc='d')
-    A=scipy_sparse_to_spmatrix(A)
-    b=matrix(b,tc='d')
+#   H=scipy_sparse_to_spmatrix(H)
+#   G=scipy_sparse_to_spmatrix(G)
+#   q=matrix(q,tc='d')
+#   h=matrix(h,tc='d')
+#   A=scipy_sparse_to_spmatrix(A)
+#   b=matrix(b,tc='d')
 #
-    sol=solvers.qp(H,q,G,h,A,b)
+    lb=np.hstack((dx_l, -np.inf, -np.inf, -np.inf ))
 #
-    xt=np.array(sol['x']).flatten()[:nut]
+    prb=cplex.Cplex()
+    prb.variables.add(q,lb=lb)
+#
+    lin_expr=[]
+#
+    ind0=list(range(nut)) + [nut]
+    val0=np.append(tve0[:,0]/scl,-tve1[:,0]/scl)
+    val0=np.append(val0,-1)
+    lin_expr.append( cplex.SparsePair(  ind=ind0, val=val0  )   )
+#
+    ind1=list(range(nut)) + [nut+1]
+    val1=np.append(tve0[:,1]/scl,-tve1[:,1]/scl)
+    val1=np.append(val1,-1)
+    lin_expr.append( cplex.SparsePair(  ind=ind1, val=val1  )   )
+#
+    ind2=list(range(nut)) + [nut+2]
+    val2=np.append(tve0[:,2]/scl,-tve1[:,2]/scl)
+    val2=np.append(val2,-1)
+    lin_expr.append( cplex.SparsePair(  ind=ind2, val=val2  )   )
+#
+    ind3=list(range(nuts[0],nuts[1]))
+    val3=dg[1][nuts[0]:nuts[1]]#np.append(tve0[:,2]/scl,-tve1[:,2]/scl)
+    lin_expr.append( cplex.SparsePair(  ind=ind3, val=val3  )   )
+#
+    ind4=list(range(nuts[1],nuts[2]))
+    val4=dg[2][nuts[1]:nuts[2]]#np.append(tve0[:,2]/scl,-tve1[:,2]/scl)
+    lin_expr.append( cplex.SparsePair(  ind=ind4, val=val4  )   )
+#
+    b = c_l*np.array([ck1[0] - ck0[0], ck1[1]-ck0[1], ck1[2]-ck0[2]])/scl
+#
+    b=np.hstack((b,1.,1.))
+#
+    prb.linear_constraints.add(lin_expr=lin_expr,rhs=b,senses=['E','E','E','L','L'])
+#
+    H=np.append(np.zeros(nut),np.ones(3))
+#
+    prb.objective.set_quadratic(H)
+#
+    prb.set_results_stream(None)
+    prb.set_log_stream(None)
+#
+    prb.solve()
+#
+    xt=np.array(prb.solution.get_values())[:nut]
     g=func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
 #
     xt0=xt[nuts[0]:nuts[1]]
