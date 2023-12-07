@@ -1,2 +1,4 @@
 *.log
 out_*
+*.vtp
+__pycache__

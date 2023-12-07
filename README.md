@@ -1,0 +1,4 @@
+# dCollisionDetection
+
+In work.
+

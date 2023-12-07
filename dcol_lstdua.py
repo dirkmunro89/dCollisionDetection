@@ -7,7 +7,61 @@ from scipy import sparse
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 #
-def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
+def dual_func(x_d,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl):
+#
+    x=dual_uptd(x_d,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl)
+#
+#   half time derivative; we start at zeros everywhere
+#
+    W=1e0*np.dot(x[-3:],x[-3:])+1e-3*np.dot(x[:nut],x[:nut]) #+1e-6*np.sum(x[:nut])
+#
+    W=W+x_d[0]*(np.dot(np.append(tve0[:,0]/scl,-tve1[:,0]/scl),x[:nut]))
+    W=W+x_d[0]*(-x[-3]+ck0[0]/scl*c_l[0]-ck1[0]/scl*c_l[0])
+#
+    W=W+x_d[1]*(np.dot(np.append(tve0[:,1]/scl,-tve1[:,1]/scl),x[:nut]))
+    W=W+x_d[1]*(-x[-2]+ck0[1]/scl*c_l[1]-ck1[1]/scl*c_l[1])
+#
+    W=W+x_d[2]*(np.dot(np.append(tve0[:,2]/scl,-tve1[:,2]/scl),x[:nut]))
+    W=W+x_d[2]*(-x[-1]+ck0[2]/scl*c_l[2]-ck1[2]/scl*c_l[2])
+#
+    W=W+x_d[3]*(np.sum(x[nuts[0]:nuts[1]])-1.)#/nut
+    W=W+x_d[4]*(np.sum(x[nuts[1]:nuts[2]])-1.)#/nut
+#
+    return -W
+#
+def dual_grad(x_d,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl):
+#
+    x=dual_uptd(x_d,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl)
+#
+    dW=np.zeros(5)
+#
+    dW[0]=np.dot(np.append(tve0[:,0]/scl,-tve1[:,0]/scl),x[:nut])-x[-3]+(ck0[0]-ck1[0])/scl*c_l[0]
+    dW[1]=np.dot(np.append(tve0[:,1]/scl,-tve1[:,1]/scl),x[:nut])-x[-2]+(ck0[1]-ck1[1])/scl*c_l[1]
+    dW[2]=np.dot(np.append(tve0[:,2]/scl,-tve1[:,2]/scl),x[:nut])-x[-1]+(ck0[2]-ck1[2])/scl*c_l[2]
+    dW[3]=(np.sum(x[nuts[0]:nuts[1]])-1.)#/nut
+    dW[4]=(np.sum(x[nuts[1]:nuts[2]])-1.)#/nut
+#
+    return -dW
+#
+def dual_uptd(x_d,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl):
+#
+    x=np.zeros(nut+3)
+#
+    x[-3]=x_d[0].copy()/1e0
+    x[-2]=x_d[1].copy()/1e0
+    x[-1]=x_d[2].copy()/1e0
+#
+    x[:nut]=-x_d[0]*np.append(tve0[:,0]/scl,-tve1[:,0]/scl)
+    x[:nut]=x[:nut]-x_d[1]*np.append(tve0[:,1]/scl,-tve1[:,1]/scl)
+    x[:nut]=x[:nut]-x_d[2]*np.append(tve0[:,2]/scl,-tve1[:,2]/scl)
+#
+    x[:nut]=x[:nut]-np.append(x_d[3]*np.ones(nuts[1]-nuts[0]),x_d[4]*np.ones(nuts[2]-nuts[1]))#/nut
+#
+    x[:nut]=np.minimum(np.maximum(-np.ones(nut)*0.+(x[:nut])/1e-3,np.zeros(nut)),1.)
+#
+    return x
+#
+def dcol_lstdua(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
 #   transform the points (about 0,0,0)
 #
@@ -35,35 +89,25 @@ def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
     c_p1=None
     c_p2=None
 #
-    dg=grad(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
+    bds=[[-1e6,1e6],[-1e6,1e6],[-1e6,1e6],[-1e4,1e4],[-1e4,1e4]]; tup_bds=tuple(bds)
+    print(bds)
+    sol=minimize(dual_func,np.array([0e0,0e0,0e0,0e0,0e0]),args=(nut,nuts,tve0,tve1,ck0,ck1,c_l,scl), \
+        jac=None,method='L-BFGS-B',bounds=tup_bds, \
+        options={'disp':True,'gtol':1e-32,'ftol':1e-32,'maxls':1000000})
+#       options={'disp':True,'maxcor':1,'gtol':1e-32,'ftol':1e-32,'maxls':1000})
+#   sol=minimize(dual_func,sol.x,args=(nut,nuts,tve0,tve1,ck0,ck1,c_l,scl), \
+#       jac=dual_grad,method='L-BFGS-B',bounds=tup_bds, \
+#       options={'disp':True,'gtol':1e-32,'ftol':1e-32,'maxls':1000})
 #
-    obj = osqp.OSQP()
+    print(sol.x)
+    x=dual_uptd(sol.x,nut,nuts,tve0,tve1,ck0,ck1,c_l,scl)
+    xt0=x[nuts[0]:nuts[1]]
+    xt1=x[nuts[1]:nuts[2]]
+    print(sum(xt0))
+    print(sum(xt1))
+    print(x)
 #
-    H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), sparse.eye(3) ], format='csc')
-#
-    q=np.zeros(nut+3) # evaluated at zero
-#
-    Ad0 = sparse.csc_matrix(np.append(tve0[:,0]/scl,-tve1[:,0]/scl))
-    Ad1 = sparse.csc_matrix(np.append(tve0[:,1]/scl,-tve1[:,1]/scl))
-    Ad2 = sparse.csc_matrix(np.append(tve0[:,2]/scl,-tve1[:,2]/scl))
-#
-    A = sparse.bmat([[  Ad0    ,-np.array([1.,0.,0.])],
-                     [  Ad1    ,-np.array([0.,1.,0.])],
-                     [  Ad2    ,-np.array([0.,0.,1.])],
-                     [  dg[1]  ,None],
-                     [  dg[2]  ,None],
-                     [sparse.eye(nut), None]],format='csc')
-#
-    b = c_l*np.array([ck1[0] - ck0[0], ck1[1]-ck0[1], ck1[2]-ck0[2]])/scl
-#
-    l = np.hstack([b, 0., 0., np.zeros(nut)])
-    u = np.hstack([b, 1., 1., np.ones(nut)])
-#
-    obj.setup(H,q,A,l,u,verbose=False,eps_abs=1e-12,eps_rel=1e-12)#,max_iter=int(1e6),polish=True)
-#
-    sol=obj.solve()
-#
-    xt=sol.x[:nut]
+    xt=x[:nut]
     g=func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
 #
     xt0=xt[nuts[0]:nuts[1]]

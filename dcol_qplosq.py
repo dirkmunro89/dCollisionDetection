@@ -42,7 +42,6 @@ def dcol_qplosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
     dg=grad(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
     ddg=hess(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
 #
-#
     G_tmp=np.zeros((nut,nut),dtype=np.float64); np.fill_diagonal(G_tmp,-1e0)
     u=-g[1:]; l=0.*np.ones(2,dtype=float)
 #
