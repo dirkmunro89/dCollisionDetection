@@ -103,14 +103,23 @@ def tfmx(x,i,c_l,c_a,c_r,tfm,int_flg,rev_flg):
 #       checked: it is normalised internally anyway; good to show it here
 #
         if rev_flg:
+            stop
             tfm.Translate(-c_l[0]*x[c*7+4], -c_l[1]*x[c*7+5], -c_l[2]*x[c*7+6])
 #           tfm.Scale(1./c_s,1./c_s,1./c_s)
-            tmp=x[c*7+1:c*7+4]#/np.linalg.norm(x[c*7+1:c*7+4])
-            tfm.RotateWXYZ(np.rad2deg(-c_a*x[c*7]), tmp[0], tmp[1], tmp[2])
+            tmp=x[c*7+0:c*7+4]/np.linalg.norm(x[c*7+0:c*7+4])
+            rot=R.from_quat(tmp).as_rotvec()#.as_matrix().T
+            tfm.RotateWXYZ(np.rad2deg(rot[0]), rot[1], rot[2], rot[3])
+#           tfm.RotateWXYZ(np.rad2deg(-c_a*x[c*7]), tmp[0], tmp[1], tmp[2])
         else:
-            tmp=x[c*7+1:c*7+4]#/np.linalg.norm(x[c*7+1:c*7+4])
-            tfm.RotateWXYZ(np.rad2deg(c_a*x[c*7]), tmp[0], tmp[1], tmp[2])
-#           tfm.Scale(c_s,c_s,c_s)
+            tmp=x[c*7+0:c*7+4]/np.linalg.norm(x[c*7+0:c*7+4])
+            qua_tmp=tmp.copy()
+            qua_tmp[-1]=tmp[0]
+            qua_tmp[0]=tmp[1]
+            qua_tmp[1]=tmp[2]
+            qua_tmp[2]=tmp[3]
+            rot=R.from_quat(qua_tmp).as_rotvec()#.as_matrix().T
+            nrm=np.linalg.norm(rot)
+            tfm.RotateWXYZ(np.rad2deg(nrm), rot[0], rot[1], rot[2])
             tfm.Translate(c_l[0]*x[c*7+4], c_l[1]*x[c*7+5], c_l[2]*x[c*7+6])
 #
     tfm.Update()

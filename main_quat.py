@@ -16,7 +16,7 @@ from dcol_qplcvx import dcol_qplcvx
 from dcol_qplcpx import dcol_qplcpx
 from dcol_qplosq import dcol_qplosq
 from dcol_lstcvx import dcol_lstcvx
-from dcol_lstosq import dcol_lstosq
+from dcol_lstosq_quat import dcol_lstosq
 from dcol_lstcpx import dcol_lstcpx
 from dcol_lstdua import dcol_lstdua
 #
