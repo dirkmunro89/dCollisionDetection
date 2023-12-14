@@ -9,7 +9,7 @@ def rota(x,vec):
         [2.*s*(qi*qk-qj*qr), 2.*s*(qj*qk+qi*qr),1.-2.*s*(qi**2.+qj**2.)]])
     return np.dot(vec,R.T)
 #
-def drotate(x,vec):
+def drota(x,vec):
 #
     qr=x[0]; qi=x[1]; qj=x[2]; qk=x[3]
     s=1.#np.linalg.norm(x)**-2.

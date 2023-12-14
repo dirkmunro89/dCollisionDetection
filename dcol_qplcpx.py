@@ -12,17 +12,25 @@ def dcol_qplcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
 #   transform the points (about 0,0,0)
 #
-    tmp = np.array([xk0[1],xk0[2],xk0[3]])
-    if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
-    else: tmp=tmp*0.
-    rot=R.from_rotvec((c_a*xk0[0])*tmp).as_matrix().T
-    tve0=np.dot(pnt0,rot)
+#   tmp = np.array([xk0[1],xk0[2],xk0[3]])
+#   if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
+#   else: tmp=tmp*0.
+#   rot=R.from_rotvec((c_a*xk0[0])*tmp).as_matrix().T
+#   tve0=np.dot(pnt0,rot)
 #
-    tmp = np.array([xk1[1],xk1[2],xk1[3]])
-    if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
-    else: tmp=tmp*0.
-    rot=R.from_rotvec((c_a*xk1[0])*tmp).as_matrix().T
-    tve1=np.dot(pnt1,rot)
+#   tmp = np.array([xk1[1],xk1[2],xk1[3]])
+#   if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
+#   else: tmp=tmp*0.
+#   rot=R.from_rotvec((c_a*xk1[0])*tmp).as_matrix().T
+#   tve1=np.dot(pnt1,rot)
+#
+    qua=xk0[:4]#/np.linalg.norm(xk0[:4])
+    tve0=rota(qua,pnt0)
+    qua=xk1[:4]#/np.linalg.norm(xk1[:4])
+    tve1=rota(qua,pnt1)
+#
+    [dtve0dr,dtve0di,dtve0dj,dtve0dk]=drota(qua,pnt0)
+    [dtve1dr,dtve1di,dtve1dj,dtve1dk]=drota(qua,pnt1)
 #
     nut=len(tve0)+len(tve1)
     nuts=[0,len(tve0),nut]

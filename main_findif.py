@@ -31,7 +31,7 @@ if __name__ == "__main__":
     c_l=np.array([300.,300.,300.]) # for in box
     c_s=1.01
     c_a=1.#np.pi 
-    c_e=100
+    c_e=10000
 #
     t0=0
     out='./out_%d/'%t0
@@ -146,13 +146,39 @@ if __name__ == "__main__":
     ei=0.
     errs=[]
     xk_keep=None
-    for k in range(100):
 #
-        xk=np.array([0 for i in range(7*n)])
-        xk=2.*np.random.rand(7*n)/1.-1./1.
+#   change this loop to do fin dif. 
+#
+    xk=np.array([0. for i in range(7*n)])
+#
+#   0 : real part of quat
+#   1 : i
+#   2 : j
+#   3 : k
+#   4 : cx
+#   5 : cy
+#   6 : cz
+#
+    xk[4]=.5
+    xk[7*pi[0]+0]=1.
+    xk[7*pi[0]+2]=1.
+#
+    xk[7*pi[1]+1]=1.
+#
+    var=0
+#
+    xk[var]=0.5
+#
+    xk_ref=xk.copy()
+#
+    for k in range(100):
 #
 #       xk=np.loadtxt('xk_kep.log')
 #
+        dx=float(k)/1e3
+#
+        if k > 0:
+            xk[var]= xk_ref[var]+dx
 #       some prep
 #
         xk0=xk[7*pi[0]:7*pi[0]+7]
@@ -204,13 +230,13 @@ if __name__ == "__main__":
 #
 #           least squares transform osqp
 #
-            [dis,xt,pos0,pos1]=dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
+            [dis,xt,pos0,pos1,dr,dc]=dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
         elif sol_flg == 7:
 #
 #           least squares transform cplex
 #
-            [dis,xt,pos0,pos1]=dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
+            [dis,xt,pos0,pos1,dr,dc]=dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
         elif sol_flg == 8:
 #
@@ -221,6 +247,16 @@ if __name__ == "__main__":
         t1=time.time()
 #
 #   output
+#
+        if k == 0:
+            dis_0 = dis
+#           if var>3:
+            dis_dif=dr#[var-4]
+#           else:
+#               dis_dif=dr
+#
+        else:
+            print('yo',(dis-dis_0)/dx, dis_dif)
 #
         nut=len(pnt0)+len(pnt1)
         nuts=[0,len(pnt0),nut]
@@ -285,7 +321,8 @@ if __name__ == "__main__":
                 xk_keep=xk.copy()
                 me=max(me,rer)
         tt=tt+t1-t0
-        log.info('%6d%16.7e%16.7e%16.7e%16.7e%16.7e'%(k,dis,dis_ref,rer,max(max(g1,g2),0.),t1-t0))
+#       print(dis,dis_ref**2.)
+#       log.info('%6d%16.7e%16.7e%16.7e%16.7e%16.7e'%(k,dis,dis_ref,rer,max(max(g1,g2),0.),t1-t0))
 #
     log.info('Maximum Rel. error (%d): %14.7e'%(ei,me))
     log.info('Absolute distance error: %14.7e'%(ae))

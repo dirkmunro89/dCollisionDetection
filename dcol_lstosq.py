@@ -6,7 +6,7 @@ from cvxopt import solvers, matrix, spmatrix
 from scipy import sparse
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
-from rota import rota
+from rota import rota, drota
 #
 def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
@@ -27,10 +27,13 @@ def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #   rot_tmp[2]=rot[1]
 #   rot_tmp[3]=rot[2]
 #
-    qua=xk0[:4]/np.linalg.norm(xk0[:4])
-    tve0=rota(qua,pnt0)
-    qua=xk1[:4]/np.linalg.norm(xk1[:4])
-    tve1=rota(qua,pnt1)
+    qua0=xk0[:4]#/np.linalg.norm(xk0[:4])
+    tve0=rota(qua0,pnt0)
+    qua1=xk1[:4]#/np.linalg.norm(xk1[:4])
+    tve1=rota(qua1,pnt1)
+#
+    [dtve0dr,dtve0di,dtve0dj,dtve0dk]=drota(qua0,pnt0)
+    [dtve1dr,dtve1di,dtve1dj,dtve1dk]=drota(qua1,pnt1)
 #
 #   tmp = np.array([xk1[1],xk1[2],xk1[3]])
 #   if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
@@ -54,7 +57,7 @@ def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
     obj = osqp.OSQP()
 #
-    H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), sparse.eye(3) ], format='csc')
+    H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), 2.*sparse.eye(3) ], format='csc')
 #
     q=np.zeros(nut+3) # evaluated at zero
 #
@@ -87,7 +90,18 @@ def dcol_lstosq(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
     pos0=np.dot(xt0,tve0)+c_l*ck0
     pos1=np.dot(xt1,tve1)+c_l*ck1
 #
-    return [np.sqrt(max(g[0],0.)*scl), xt, pos0, pos1]
+    dc=c_l[0]/scl*sol.y[0]
+#
+#   print(sol.y[:3])
+#   print(np.dot(xt0,dtve0dr[:,0])*scl)
+#   print(np.dot(xt0,dtve0dr[:,1])*scl)
+#   print(np.dot(xt0,dtve0dr[:,2])*scl)
+#   stop
+    dr=sol.y[0]*np.dot(xt0,dtve0dr[:,0])/scl
+    dr=dr+sol.y[1]*np.dot(xt0,dtve0dr[:,1])/scl
+    dr=dr+sol.y[2]*np.dot(xt0,dtve0dr[:,2])/scl
+#
+    return g[0]*scl, xt, pos0, pos1, dr, dc
 #
 def hess(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl):
 #

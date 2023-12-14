@@ -8,6 +8,8 @@ from scipy import sparse
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 #
+from rota import rota,drota
+#
 def scipy_sparse_to_spmatrix(A):
     coo = A.tocoo()
     SP = spmatrix(coo.data.tolist(), coo.row.tolist(), coo.col.tolist(), size=A.shape)
@@ -17,17 +19,22 @@ def dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
 #   transform the points (about 0,0,0)
 #
-    tmp = np.array([xk0[1],xk0[2],xk0[3]])
-    if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
-    else: tmp=tmp*0.
-    rot=R.from_rotvec((c_a*xk0[0])*tmp).as_matrix().T
-    tve0=np.dot(pnt0,rot)
+    tmp = xk0[:4]
+#   if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
+#   else: tmp=tmp*0.
+    qua=xk0[:4]#/np.linalg.norm(xk0[:4])
+    tve0=rota(qua,pnt0)
+#   rot=R.from_rotvec((c_a*xk0[0])*tmp).as_matrix().T
+#   tve0=np.dot(pnt0,rot)
+    dPdr = drota(qua,pnt0)
 #
-    tmp = np.array([xk1[1],xk1[2],xk1[3]])
-    if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
-    else: tmp=tmp*0.
-    rot=R.from_rotvec((c_a*xk1[0])*tmp).as_matrix().T
-    tve1=np.dot(pnt1,rot)
+    tmp = xk1[:4]
+#   if np.linalg.norm(tmp): tmp = tmp/np.linalg.norm(tmp)
+#   else: tmp=tmp*0.
+#   rot=R.from_rotvec((c_a*xk1[0])*tmp).as_matrix().T
+#   tve1=np.dot(pnt1,rot)
+    qua=xk1[:4]#/np.linalg.norm(xk1[:4])
+    tve1=rota(qua,pnt1)
 #
     nut=len(tve0)+len(tve1)
     nuts=[0,len(tve0),nut]
@@ -61,11 +68,12 @@ def dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
                      [  Ad2    ,-np.array([0.,0.,1.])]],format='csc')
 #
 #
-    H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), sparse.eye(3) ], format='csc')
+#   H=sparse.block_diag(  [sparse.csc_matrix((nut,nut)), 2.*sparse.eye(3) ], format='csc')
+    H=sparse.block_diag(  [0e0*sparse.eye(nut), 2.*sparse.eye(3) ], format='csc')
     q=np.zeros(nut+3) 
-    solvers.options['show_progress']=False
+    solvers.options['show_progress']=True
     solvers.options['refinement']=True
-    solvers.options['abstol']=1e-9
+    solvers.options['abstol']=1e-32
     solvers.options['maxiters']=int(1e6)
 #
 #   H=scipy_sparse_to_spmatrix(H)
@@ -109,16 +117,23 @@ def dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
 #
     b=np.hstack((b,1.,1.))
 #
-    prb.linear_constraints.add(lin_expr=lin_expr,rhs=b,senses=['E','E','E','L','L'])
+    prb.linear_constraints.add(lin_expr=lin_expr,rhs=b,senses=['E','E','E','E','E'])
 #
-    H=np.append(np.zeros(nut),np.ones(3))
+    H=np.append(1e-6*np.ones(nut),2.*np.ones(3))
 #
     prb.objective.set_quadratic(H)
 #
     prb.set_results_stream(None)
     prb.set_log_stream(None)
 #
+#   print(prb.parameters.qpmethod.help())
+#   prb.parameters.qpmethod.set(prb.parameters.qpmethod.values.barrier)
+    prb.parameters.barrier.convergetol.set(1e-12)
+#   stop
     prb.solve()
+#
+    dr = 1.
+    dc=-c_l/scl*prb.solution.get_dual_values()[:3]
 #
     xt=np.array(prb.solution.get_values())[:nut]
     g=func(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl)
@@ -129,7 +144,7 @@ def dcol_lstcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,sol_flg):
     pos0=np.dot(xt0,tve0)+c_l*ck0
     pos1=np.dot(xt1,tve1)+c_l*ck1
 #
-    return [np.sqrt(max(g[0],0.)*scl), xt, pos0, pos1]
+    return [g[0]*scl, xt, pos0, pos1,dr,dc]
 #
 def hess(xt,ck0,ck1,tve0,tve1,nuts,c_a,c_l,c_p1,c_p2,sol_flg,scl):
 #
