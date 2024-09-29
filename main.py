@@ -188,9 +188,9 @@ if __name__ == "__main__":
 #
             [dis,xt,pos0,pos1]=dcol_qplosq(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
-#           QP cplex
-#
         elif sol_flg == 4:
+#
+#           QP cplex
 #
             [dis,xt,pos0,pos1]=dcol_qplcpx(xk0,xk1,pnt0,pnt1,c_a,c_l,1)
 #
